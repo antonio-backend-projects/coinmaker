@@ -52,7 +52,7 @@ class TradingBot:
             self.client,
             self.position_monitor,
             initial_equity=float(os.getenv("INITIAL_EQUITY", 10000)),
-            risk_per_trade=float(os.getenv("RISK_PER_CONDOR", 0.01)), # Default
+            risk_per_condor=float(os.getenv("RISK_PER_CONDOR", 0.01)), # Default
             max_portfolio_risk=float(os.getenv("MAX_PORTFOLIO_RISK", 0.03)) # Default
         )
 
