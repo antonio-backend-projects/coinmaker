@@ -186,6 +186,66 @@ class DeribitClient:
             return response["result"]
         return None
 
+    def get_ohlcv(self, instrument_name: str, timeframe: str = "15", limit: int = 50) -> List[List[float]]:
+        """
+        Get OHLCV data (TradingView chart data)
+        
+        Args:
+            instrument_name: e.g., BTC-PERPETUAL
+            timeframe: Resolution in minutes (1, 3, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1D)
+            limit: Number of candles to return
+            
+        Returns:
+            List of [timestamp, open, high, low, close, volume]
+        """
+        endpoint = "/public/get_tradingview_chart_data"
+        
+        # Calculate start/end timestamps
+        # Resolution is in minutes (except 1D)
+        if timeframe == "1D":
+            res_minutes = 1440
+        elif timeframe.endswith("m"):
+             res_minutes = int(timeframe[:-1])
+        else:
+             res_minutes = int(timeframe)
+             
+        end_ts = int(time.time() * 1000)
+        start_ts = end_ts - (limit * res_minutes * 60 * 1000)
+        
+        params = {
+            "instrument_name": instrument_name,
+            "start_timestamp": start_ts,
+            "end_timestamp": end_ts,
+            "resolution": timeframe.replace("m", "") # Deribit uses "15" not "15m"
+        }
+        
+        response = self._request("GET", endpoint, params)
+        
+        if response and "result" in response:
+            result = response["result"]
+            # Format: ticks (timestamp), open, high, low, close, volume
+            # We want list of lists: [[ts, o, h, l, c, v], ...]
+            ticks = result.get("ticks", [])
+            opens = result.get("open", [])
+            highs = result.get("high", [])
+            lows = result.get("low", [])
+            closes = result.get("close", [])
+            volumes = result.get("volume", [])
+            
+            ohlcv = []
+            for i in range(len(ticks)):
+                ohlcv.append([
+                    ticks[i],
+                    opens[i],
+                    highs[i],
+                    lows[i],
+                    closes[i],
+                    volumes[i]
+                ])
+            return ohlcv
+            
+        return []
+
     # Private endpoints
 
     def get_account_summary(self, currency: str) -> Optional[Dict]:
