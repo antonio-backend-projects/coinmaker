@@ -7,8 +7,9 @@ coinmaker/
 ├── 📄 README.md                    # Documentazione principale
 ├── 📄 SETUP_GUIDE.md               # Guida setup dettagliata
 ├── 📄 PROJECT_STRUCTURE.md         # Questo file
+├── 📄 SMART_MONEY_STRATEGY.md      # Dettagli strategia Smart Money
 ├── 📄 idea-progetto.md             # Documento strategia originale
-├── 📄 strategia-dettagliata.md     # Dettagli strategia implementata
+├── 📄 strategia-dettagliata.md     # Dettagli strategia Iron Condor
 │
 ├── 📄 requirements.txt             # Dipendenze Python
 ├── 📄 .env.example                 # Template configurazione
@@ -32,7 +33,9 @@ coinmaker/
 │   │
 │   ├── 📂 strategies/              # Strategie di trading
 │   │   ├── __init__.py
-│   │   └── iron_condor.py          # Strategia Iron Condor
+│   │   ├── base_strategy.py        # Interfaccia base strategie
+│   │   ├── iron_condor.py          # Strategia Iron Condor
+│   │   └── smart_money.py          # Strategia Smart Money
 │   │
 │   └── 📂 utils/                   # Utilità
 │       ├── __init__.py
@@ -143,23 +146,23 @@ Gestione rischio e sizing:
 
 ### 📊 Strategies
 
+#### `src/strategies/base_strategy.py`
+Classe astratta che definisce l'interfaccia comune per tutte le strategie:
+- `scan()`: Cerca segnali di ingresso
+- `execute_entry()`: Esegue l'ordine di ingresso
+- `manage_positions()`: Gestisce le posizioni aperte
+
 #### `src/strategies/iron_condor.py`
-Costruzione Iron Condor:
-- Dataclass per leg e condor
-- Selezione strike basata su delta
-- Calcolo credit, max loss, max profit
-- Validazione struttura
+Implementazione strategia Iron Condor (Opzioni):
+- Costruzione struttura a 4 gambe
+- Selezione strike basata su Delta
+- Gestione rischio definita
 
-**Classi:**
-- `OptionLeg`: Rappresenta un singolo leg
-- `IronCondor`: Struttura completa del condor
-- `IronCondorBuilder`: Costruisce il condor
-
-**Metodi principali:**
-- `find_strike_by_delta()`: Trova strike con delta target
-- `find_protective_strike()`: Trova strike protettivi (long)
-- `build_condor()`: Costruisce condor completo
-- `get_days_to_expiration()`: Calcola DTE
+#### `src/strategies/smart_money.py`
+Implementazione strategia Smart Money (Futures):
+- **Time Window**: Filtro orario (London/NY overlap)
+- **Binance Whale Volume**: Analisi flussi volume spot
+- **Liquidity Hunter**: Rilevamento pattern Sweep & Reclaim
 
 ### 🛠️ Utils
 

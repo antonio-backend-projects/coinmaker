@@ -25,7 +25,6 @@ class TestStrategies(unittest.TestCase):
             "risk_manager": self.mock_risk_manager
         }
         
-        # Mock Risk Manager to always allow new positions
         self.mock_risk_manager.can_open_new_position.return_value = (True, "OK")
         self.mock_risk_manager.calculate_position_size.return_value = 1000.0
         self.mock_risk_manager.validate_trade.return_value = (True, "OK")
@@ -35,55 +34,38 @@ class TestStrategies(unittest.TestCase):
         config = IronCondorConfig(name="Iron Condor Test")
         strategy = IronCondorStrategy(self.mock_client, config, self.dependencies)
         
-        # Mock Data
         self.mock_client.get_index_price.return_value = 50000.0
         self.mock_client.get_instruments.return_value = [
             {"instrument_name": "BTC-27DEC24-50000-C", "expiration_timestamp": (datetime.now().timestamp() + 7*24*3600)*1000}
         ]
-        
-        # Mock options chain with greeks
-        # We need to mock get_order_book calls inside get_options_chain_with_greeks
-        # This is complex to mock perfectly without refactoring, so we'll mock the internal method if possible
-        # Or just mock get_order_book to return valid data
         self.mock_client.get_order_book.return_value = {
             "mark_price": 0.01,
             "mark_iv": 50.0,
             "greeks": {"delta": 0.12}
         }
         
-        # Run scan
-        # Since we mocked get_instruments to return only 1, it might fail to find all legs.
-        # But we just want to see if it runs without error.
         signals = strategy.scan()
         print(f"Signals found: {len(signals)}")
-        # Expected 0 because we didn't provide enough options for a full condor
         self.assertEqual(len(signals), 0) 
 
-    @patch('src.strategies.smart_money.WhaleAlertClient')
+    @patch('src.strategies.smart_money.BinanceWhaleClient')
     def test_smart_money_scan(self, MockWhaleClient):
-        print("\nTesting Smart Money Strategy...")
-        config = SmartMoneyConfig(name="Smart Money Test", time_window_start=0, time_window_end=24) # Force active window
+        print("\nTesting Smart Money Strategy (Binance)...")
+        config = SmartMoneyConfig(name="Smart Money Test", time_window_start=0, time_window_end=24)
         strategy = SmartMoneyStrategy(self.mock_client, config, self.dependencies)
         
-        # Mock Whale Client
+        # Mock Binance Client
         mock_whale = MockWhaleClient.return_value
-        mock_whale.get_netflow_sentiment.return_value = "BULLISH"
-        strategy.whale_client = mock_whale # Inject mock
+        mock_whale.get_whale_sentiment.return_value = "BULLISH"
+        strategy.whale_client = mock_whale
         
         # Mock OHLCV for Liquidity Sweep (Bullish)
-        # Low < PrevLow, Close > PrevLow
-        # [ts, o, h, l, c, v]
         ohlcv = []
         for i in range(50):
-            ohlcv.append([i, 100, 105, 95, 100, 1000]) # Flat
+            ohlcv.append([i, 100, 105, 95, 100, 1000])
         
-        # Set a low point at index -20
         ohlcv[-20] = [0, 100, 100, 90, 95, 1000] # Low = 90
-        
-        # Current candle (Bullish Sweep)
-        # Low (89) < PrevLow (90)
-        # Close (92) > PrevLow (90)
-        ohlcv[-1] = [0, 95, 98, 89, 92, 1000]
+        ohlcv[-1] = [0, 95, 98, 89, 92, 1000] # Low 89 < 90, Close 92 > 90
         
         self.mock_client.get_ohlcv.return_value = ohlcv
         
@@ -95,7 +77,7 @@ class TestStrategies(unittest.TestCase):
             print(f"Signal: {signals[0]}")
             self.assertEqual(signals[0]['type'], 'smart_money')
             self.assertEqual(signals[0]['direction'], 'buy')
-            self.assertEqual(signals[0]['reason'], 'Bullish Sweep + Outflow')
+            self.assertEqual(signals[0]['reason'], 'Bullish Sweep + Whale Buy Vol')
         else:
             print("No signals found (unexpected for this test case)")
 

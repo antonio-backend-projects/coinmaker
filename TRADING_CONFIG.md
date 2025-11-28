@@ -123,5 +123,18 @@ ORDER_MAX_RETRIES=3
 ORDER_RETRY_DELAY=1.0
 ORDER_AGGRESSIVE_LIMITS=true
 ORDER_SLIPPAGE_PCT=0.10  # 10% per testnet, 0.03 per live
-ORDER_FILL_TIMEOUT=5     # secondi
+## Smart Money Configuration
+
+Variabili specifiche per la strategia Smart Money:
+
+```bash
+# Smart Money
+STRATEGY_SMART_MONEY_ENABLED=true
+SM_TIME_WINDOW_START=14
+SM_TIME_WINDOW_END=17
+SM_WHALE_MIN_VALUE=500000
+SM_BINANCE_SYMBOL=BTCUSDT
 ```
+
+- **SM_WHALE_MIN_VALUE**: Alza questo valore se vedi troppi segnali (es. 1.000.000). Abbassalo se ne vedi pochi.
+- **SM_BINANCE_SYMBOL**: Assicurati che corrisponda a una coppia valida su Binance (es. ETHUSDT per Ethereum).

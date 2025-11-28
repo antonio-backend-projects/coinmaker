@@ -45,8 +45,8 @@ class SmartMoneyConfig(StrategyConfig):
     """Configuration for Smart Money strategy"""
     time_window_start: int = 14  # 14:00
     time_window_end: int = 17    # 17:00
-    whale_alert_min_value: int = 500000  # $500k
-    whale_alert_api_key: str = ""
+    whale_min_value: int = 500000  # $500k
+    binance_symbol: str = "BTCUSDT"
     liquidity_lookback_periods: int = 20
     timeframe: str = "15m"
     symbol: str = "BTC/USDT"
@@ -97,10 +97,10 @@ class Config:
         if os.getenv("STRATEGY_SMART_MONEY_ENABLED", "true").lower() == "true":
             cls.STRATEGIES.append(SmartMoneyConfig(
                 name="Smart Money",
-                whale_alert_api_key=os.getenv("WHALE_ALERT_API_KEY", ""),
                 time_window_start=int(os.getenv("SM_TIME_WINDOW_START", 14)),
                 time_window_end=int(os.getenv("SM_TIME_WINDOW_END", 17)),
-                whale_alert_min_value=int(os.getenv("SM_WHALE_MIN_VALUE", 500000))
+                whale_min_value=int(os.getenv("SM_WHALE_MIN_VALUE", 500000)),
+                binance_symbol=os.getenv("SM_BINANCE_SYMBOL", "BTCUSDT")
             ))
 
     @classmethod
@@ -125,9 +125,7 @@ class Config:
                 if strategy.initial_equity <= 0:
                     errors.append("Iron Condor: INITIAL_EQUITY must be positive")
             elif isinstance(strategy, SmartMoneyConfig):
-                # Whale Alert API key is optional for now if we mock it, but good to warn
-                if not strategy.whale_alert_api_key:
-                    print("⚠️ Warning: WHALE_ALERT_API_KEY not set. Smart Money strategy might be limited.")
+                pass
 
         if errors:
             for error in errors:
@@ -152,7 +150,8 @@ class Config:
                 print(f"  Max Portfolio Risk: {strategy.max_portfolio_risk:.1%}")
             elif isinstance(strategy, SmartMoneyConfig):
                 print(f"  Time Window: {strategy.time_window_start}:00 - {strategy.time_window_end}:00")
-                print(f"  Whale Alert Min: ${strategy.whale_alert_min_value:,.0f}")
+                print(f"  Whale Min Value: ${strategy.whale_min_value:,.0f}")
+                print(f"  Binance Symbol: {strategy.binance_symbol}")
         print("=" * 60)
 
 if __name__ == "__main__":

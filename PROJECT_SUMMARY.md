@@ -10,8 +10,12 @@
 
 ## 🎯 Obiettivo del Progetto
 
-Creare un bot di trading algoritmico completo che implementa la strategia **Short Iron Condor** su opzioni crypto (BTC/ETH) tramite l'exchange Deribit, con focus su:
+Coinmaker è un bot di trading algoritmico modulare progettato per operare sui mercati crypto (Deribit e Binance).
+Supporta un'architettura multi-strategia che permette di eseguire diverse logiche di trading in parallelo.
 
+Attualmente implementa due strategie principali:
+1.  **Iron Condor (Opzioni)**: Strategia delta-neutral per incassare premio dalla volatilità.
+2.  **Smart Money (Futures)**: Strategia direzionale intraday basata sui flussi di volume delle "balene" su Binance.
 - ✅ Risk management rigoroso con interesse composto
 - ✅ Gestione automatica Take Profit e Stop Loss
 - ✅ API-friendly per automazione completa

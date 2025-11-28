@@ -1,15 +1,15 @@
-# Coinmaker - Iron Condor Trading Bot
+# Coinmaker - Multi-Strategy Trading Bot
 
-Bot di trading algoritmico per implementare la strategia **Short Iron Condor** su opzioni crypto (BTC/ETH) tramite API Deribit.
+Bot di trading algoritmico modulare che supporta diverse strategie su opzioni e futures crypto (BTC/ETH) tramite API Deribit e Binance.
 
 ## 🎯 Caratteristiche Principali
 
-- **Strategia Iron Condor**: Short premium con rischio definito su opzioni European cash-settled
-- **Gestione Rischio Avanzata**: Sizing dinamico con interesse composto
-- **Take Profit & Stop Loss Automatici**: Chiusura automatica delle posizioni
-- **API-Friendly**: Integrazione completa con Deribit API
-- **Multi-Currency**: Supporto per BTC ed ETH
-- **Volatility Filtering**: Entra solo quando l'IV è sopra soglie definite
+- **Architettura Multi-Strategia**: Esegui più strategie contemporaneamente (es. Iron Condor + Smart Money).
+- **Strategia Iron Condor**: Short premium con rischio definito su opzioni.
+- **Strategia Smart Money**: Trading direzionale basato su flussi "Whale" e caccia alla liquidità.
+- **Gestione Rischio Avanzata**: Sizing dinamico con interesse composto.
+- **Integrazione Binance**: Usa i volumi spot di Binance come segnale per i futures Deribit.
+- **API-Friendly**: Integrazione completa con Deribit API e Binance Public API.
 
 ## 📋 Requisiti
 
@@ -51,18 +51,26 @@ mkdir logs
 
 Parametri chiave nel file `.env`:
 
+### Abilitazione Strategie
+| Parametro | Descrizione | Default |
+|-----------|-------------|---------|
+| `STRATEGY_IRON_CONDOR_ENABLED` | Abilita Iron Condor | true |
+| `STRATEGY_SMART_MONEY_ENABLED` | Abilita Smart Money | true |
+
+### Iron Condor
 | Parametro | Descrizione | Default |
 |-----------|-------------|---------|
 | `INITIAL_EQUITY` | Capitale iniziale in USD | 10000 |
 | `RISK_PER_CONDOR` | Rischio per condor (% equity) | 0.01 (1%) |
 | `MAX_PORTFOLIO_RISK` | Rischio massimo portafoglio | 0.03 (3%) |
-| `TP_RATIO` | Take profit (% del credito) | 0.55 (55%) |
-| `SL_MULT` | Stop loss (multiplo credito) | 1.2 (120%) |
-| `MIN_DTE` | Giorni minimi a scadenza | 7 |
-| `MAX_DTE` | Giorni massimi a scadenza | 10 |
-| `MIN_IV_PERCENTILE` | IV percentile minimo | 30 |
-| `SHORT_DELTA_TARGET` | Delta target per short | 0.12 |
-| `WING_WIDTH_PERCENT` | Larghezza ali protettive | 0.05 (5%) |
+
+### Smart Money
+| Parametro | Descrizione | Default |
+|-----------|-------------|---------|
+| `SM_TIME_WINDOW_START` | Ora inizio (UTC+1) | 14 |
+| `SM_TIME_WINDOW_END` | Ora fine (UTC+1) | 17 |
+| `SM_WHALE_MIN_VALUE` | Minimo valore trade whale ($) | 500000 |
+| `SM_BINANCE_SYMBOL` | Simbolo Binance Spot | BTCUSDT |
 
 ## 🎮 Utilizzo
 
@@ -119,21 +127,19 @@ Ctrl+C
 
 ## 📊 Come Funziona
 
-### 1. Strategia Iron Condor
+### 1. Strategia Iron Condor (Opzioni)
+Il bot costruisce strutture Iron Condor neutrali (Delta Neutral) vendendo volatilità.
+- **Entrata**: Quando IV è alta (>30 percentile).
+- **Struttura**: Short Put + Short Call (Delta 0.12) con ali protettive.
+- **Uscita**: TP al 55% del credito o SL al 120%.
 
-Il bot costruisce strutture Iron Condor composte da 4 opzioni:
+### 2. Strategia Smart Money (Futures/Perps)
+Il bot cerca confluenza tra 3 fattori per trade direzionali intraday:
+1.  **Time**: Solo durante l'overlap Londra/New York (14:00-17:00).
+2.  **Whale Volume**: Analizza i trade su Binance Spot > $500k. Se i compratori aggressivi dominano -> Bullish.
+3.  **Liquidity Sweep**: Cerca pattern di "caccia agli stop" (prezzo rompe un minimo ma chiude sopra).
 
-```
-Long Put (protezione)
-    ↓
-Short Put (venduta, delta ~-0.12)
-    ↓
-[ZONA DI PROFITTO]
-    ↓
-Short Call (venduta, delta ~+0.12)
-    ↓
-Long Call (protezione)
-```
+**Segnale**: Se (Whale Bullish AND Liquidity Sweep Long) -> BUY Signal.
 
 ### 2. Selezione delle Posizioni
 
