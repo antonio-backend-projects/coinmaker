@@ -262,3 +262,35 @@ class RiskManager:
         except Exception as e:
             logger.error(f"Error during emergency stop: {e}")
             return False
+    def calculate_futures_quantity(self, entry_price: float, sl_price: float, risk_pct: float = 0.01) -> float:
+        """
+        Calculate position size for futures/perpetuals based on risk percentage and stop loss.
+        
+        Formula: Quantity = (Equity * Risk_Pct) / |Entry - SL|
+        Returns quantity in Base Currency (e.g., BTC).
+        
+        Args:
+            entry_price: Entry price
+            sl_price: Stop loss price
+            risk_pct: Risk percentage (default 1%)
+            
+        Returns:
+            Quantity in base currency (e.g. BTC)
+        """
+        equity = self.get_total_equity()
+        
+        if entry_price <= 0 or sl_price <= 0:
+            logger.error("Invalid prices for size calculation")
+            return 0.0
+            
+        price_diff = abs(entry_price - sl_price)
+        if price_diff == 0:
+             logger.error("Entry price equals SL price, cannot calculate size")
+             return 0.0
+             
+        risk_amount = equity * risk_pct
+        quantity = risk_amount / price_diff
+        
+        logger.info(f"Calculated Futures Size: {quantity:.4f} BTC (Equity: ${equity:.2f}, Risk: ${risk_amount:.2f}, Diff: ${price_diff:.2f})")
+        
+        return quantity

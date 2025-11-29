@@ -2,14 +2,26 @@
 
 Bot di trading algoritmico modulare che supporta diverse strategie su opzioni e futures crypto (BTC/ETH) tramite API Deribit e Binance.
 
-## 🎯 Caratteristiche Principali
+## 🚀 Features
 
-- **Architettura Multi-Strategia**: Esegui più strategie contemporaneamente (es. Iron Condor + Smart Money).
-- **Strategia Iron Condor**: Short premium con rischio definito su opzioni.
-- **Strategia Smart Money**: Trading direzionale basato su flussi "Whale" e caccia alla liquidità.
-- **Gestione Rischio Avanzata**: Sizing dinamico con interesse composto.
-- **Integrazione Binance**: Usa i volumi spot di Binance come segnale per i futures Deribit.
-- **API-Friendly**: Integrazione completa con Deribit API e Binance Public API.
+### 🧠 Strategie
+- **Iron Condor (Opzioni)**: Strategia Delta-neutral per generare rendita dal decadimento temporale (Theta) su BTC ed ETH.
+- **Smart Money (Futures)**: Strategia intraday basata su:
+  - **Liquidity Sweeps**: Caccia agli stop loss.
+  - **Order Flow Analysis**: Conferma tramite CVD e Assorbimento (Whale Walls) su dati Binance.
+  - **Time Windows**: Operatività limitata agli orari di massima liquidità.
+
+### 🛡️ Risk Management
+- **Dynamic Sizing**: Calcolo automatico della size basato sull'Equity.
+- **Futures Protection**: Formula matematica per rischiare esattamente l'X% del conto per trade (Size basata sulla distanza dello Stop Loss).
+- **Portfolio Limits**: Limiti massimi di esposizione e drawdown.
+- **Emergency Stop**: Chiusura immediata di tutte le posizioni in caso di anomalie.
+
+### ⚙️ Core
+- **Deribit API**: Integrazione completa (Trading, Market Data, Account).
+- **Binance Data**: Analisi flussi volumetrici spot per conferme trend.
+- **Modularità**: Architettura estensibile per aggiungere nuove strategie.
+- **Docker Ready**: Pronto per il deployment su server/VPS.
 
 ## 📋 Requisiti
 

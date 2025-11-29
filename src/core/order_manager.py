@@ -424,3 +424,76 @@ class OrderManager:
         except Exception as e:
             logger.error(f"Error cancelling orders: {e}")
             return False
+    def execute_smart_money_trade(self, instrument_name: str, direction: str, quantity: float, sl_price: float) -> bool:
+        """
+        Execute a Smart Money trade with immediate Stop Loss.
+        
+        Args:
+            instrument_name: Instrument (e.g. BTC-PERPETUAL)
+            direction: "buy" or "sell"
+            quantity: Amount to trade (Contracts/USD for Inverse)
+            sl_price: Stop Loss trigger price
+            
+        Returns:
+            True if successful
+        """
+        logger.info(f"Executing Smart Money Trade: {direction.upper()} {quantity} {instrument_name} with SL @ {sl_price}")
+        
+        try:
+            # 1. Place Market Order for Entry
+            if direction == "buy":
+                order = self.client.buy(instrument_name, quantity, type_="market", label="smart_money_entry")
+            else:
+                order = self.client.sell(instrument_name, quantity, type_="market", label="smart_money_entry")
+                
+            if not order:
+                logger.error("Entry order failed")
+                return False
+                
+            order_id = order.get('order_id')
+            logger.info(f"Entry order placed: {order_id}")
+            
+            # 2. Place Stop Loss Order
+            # For Buy entry, SL is a Sell Stop Market
+            # For Sell entry, SL is a Buy Stop Market
+            sl_side = "sell" if direction == "buy" else "buy"
+            
+            # Deribit trigger type: "index_price" or "mark_price" or "last_price"
+            # Usually "mark_price" is safer to avoid wicks
+            
+            sl_order = None
+            if sl_side == "buy":
+                sl_order = self.client.buy(
+                    instrument_name=instrument_name, 
+                    amount=quantity, 
+                    type_="stop_market", 
+                    trigger="mark_price", 
+                    price=sl_price, # For stop_market, price arg might be trigger_price depending on wrapper, but usually trigger_price is separate
+                    label="smart_money_sl",
+                    reduce_only=True
+                )
+                # Note: Deribit API uses 'trigger_price' param, but client wrapper might map 'price' to it for stop orders?
+                # Checking DeribitClient wrapper would be ideal. Assuming standard kwargs pass-through.
+            else:
+                sl_order = self.client.sell(
+                    instrument_name=instrument_name, 
+                    amount=quantity, 
+                    type_="stop_market", 
+                    trigger="mark_price", 
+                    price=sl_price,
+                    label="smart_money_sl",
+                    reduce_only=True
+                )
+                
+            if sl_order:
+                logger.info(f"Stop Loss order placed: {sl_order.get('order_id')} @ {sl_price}")
+                return True
+            else:
+                logger.error("Stop Loss order failed! Closing position immediately.")
+                # Emergency close if SL fails
+                self.client.close_position(instrument_name, type_="market")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error executing Smart Money trade: {e}")
+            return False

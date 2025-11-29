@@ -132,9 +132,14 @@ Variabili specifiche per la strategia Smart Money:
 STRATEGY_SMART_MONEY_ENABLED=true
 SM_TIME_WINDOW_START=14
 SM_TIME_WINDOW_END=17
-SM_WHALE_MIN_VALUE=500000
 SM_BINANCE_SYMBOL=BTCUSDT
+
+# Order Flow / Absorption
+SM_ABSORPTION_MIN_VOL=10.0       # Volume minimo per analisi (BTC)
+SM_ABSORPTION_DELTA_RATIO=0.15   # Ratio Delta/TotalVol (0.15 = 15%)
+SM_ABSORPTION_PRICE_THRESHOLD=0.01 # Soglia movimento prezzo (0.01%)
 ```
 
-- **SM_WHALE_MIN_VALUE**: Alza questo valore se vedi troppi segnali (es. 1.000.000). Abbassalo se ne vedi pochi.
-- **SM_BINANCE_SYMBOL**: Assicurati che corrisponda a una coppia valida su Binance (es. ETHUSDT per Ethereum).
+- **SM_ABSORPTION_MIN_VOL**: Alza questo valore se vuoi analizzare solo blocchi di volume significativi.
+- **SM_ABSORPTION_DELTA_RATIO**: Determina quanto deve essere "sbilanciato" il volume (Buy vs Sell) per segnalare assorbimento.
+- **SM_ABSORPTION_PRICE_THRESHOLD**: Definisce quanto il prezzo deve rimanere "fermo" nonostante la pressione per confermare l'assorbimento.

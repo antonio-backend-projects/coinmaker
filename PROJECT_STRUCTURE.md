@@ -134,15 +134,16 @@ Monitora posizioni e gestisce TP/SL:
 Gestione rischio e sizing:
 - Calcolo equity corrente
 - Sizing dinamico con compounding
+- **Futures Sizing**: Calcolo size basato su Stop Loss
 - Validazione trade
 - Limiti di rischio portafoglio
 
 **Metodi principali:**
 - `get_current_equity()`: Equity da Deribit
-- `calculate_position_size()`: Calcola size per nuovo trade
+- `calculate_position_size()`: Calcola size per Iron Condor
+- `calculate_futures_quantity()`: Calcola size per Futures (Risk/SL)
 - `can_open_new_position()`: Check se possiamo aprire
 - `validate_trade()`: Valida trade prima dell'esecuzione
-- `get_risk_summary()`: Report rischio completo
 
 ### 📊 Strategies
 
@@ -161,8 +162,12 @@ Implementazione strategia Iron Condor (Opzioni):
 #### `src/strategies/smart_money.py`
 Implementazione strategia Smart Money (Futures):
 - **Time Window**: Filtro orario (London/NY overlap)
-- **Binance Whale Volume**: Analisi flussi volume spot
 - **Liquidity Hunter**: Rilevamento pattern Sweep & Reclaim
+- **Advanced Flow Analyzer**: Analisi CVD e Assorbimento (Binance Data)
+
+**Classi:**
+- `SmartMoneyStrategy`: Logica principale
+- `AdvancedFlowAnalyzer`: Motore analisi Order Flow (CCXT)
 
 ### 🛠️ Utils
 

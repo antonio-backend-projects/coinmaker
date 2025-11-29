@@ -50,6 +50,9 @@ class SmartMoneyConfig(StrategyConfig):
     liquidity_lookback_periods: int = 20
     timeframe: str = "15m"
     symbol: str = "BTC/USDT"
+    absorption_min_vol: float = 10.0
+    absorption_delta_ratio: float = 0.15
+    absorption_price_threshold: float = 0.01
 
 
 class Config:
@@ -100,7 +103,10 @@ class Config:
                 time_window_start=int(os.getenv("SM_TIME_WINDOW_START", 14)),
                 time_window_end=int(os.getenv("SM_TIME_WINDOW_END", 17)),
                 whale_min_value=int(os.getenv("SM_WHALE_MIN_VALUE", 500000)),
-                binance_symbol=os.getenv("SM_BINANCE_SYMBOL", "BTCUSDT")
+                binance_symbol=os.getenv("SM_BINANCE_SYMBOL", "BTCUSDT"),
+                absorption_min_vol=float(os.getenv("SM_ABSORPTION_MIN_VOL", 10.0)),
+                absorption_delta_ratio=float(os.getenv("SM_ABSORPTION_DELTA_RATIO", 0.15)),
+                absorption_price_threshold=float(os.getenv("SM_ABSORPTION_PRICE_THRESHOLD", 0.01))
             ))
 
     @classmethod
