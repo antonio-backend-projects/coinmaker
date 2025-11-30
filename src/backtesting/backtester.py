@@ -12,9 +12,11 @@ class Backtester:
     Simple Event-Driven Backtester for Smart Money Strategy.
     """
     
-    def __init__(self, initial_capital: float = 1000.0):
+    def __init__(self, initial_capital: float = 1000.0, commission: float = 0.0006, slippage: float = 0.0):
         self.initial_capital = initial_capital
         self.capital = initial_capital
+        self.commission = commission # e.g. 0.0006 = 0.06% per trade
+        self.slippage = slippage # e.g. 0.0001 = 0.01% price impact
         self.trades: List[Dict] = []
         self.equity_curve: List[float] = []
         
@@ -54,17 +56,28 @@ class Backtester:
             self.equity_curve.append(self.capital)
             
         self._generate_report()
-        
+
     def _open_position(self, signal: Dict, row) -> Dict:
         """Simulate opening a position"""
-        entry_price = row['close'] # Assume close execution
+        entry_price = row['close']
+        
+        # Apply Slippage to Entry
+        if signal['direction'] == 'long':
+            entry_price *= (1 + self.slippage)
+        else:
+            entry_price *= (1 - self.slippage)
+            
         sl = signal['sl']
         
         # Sizing (1.5% Risk)
         risk_pct = 0.015
         risk_amt = self.capital * risk_pct
         dist = abs(entry_price - sl)
-        size = risk_amt / dist
+        
+        if dist == 0:
+            size = 0
+        else:
+            size = risk_amt / dist
         
         tp = entry_price + (dist * 2.5) if signal['direction'] == 'long' else entry_price - (dist * 2.5)
         
@@ -83,30 +96,44 @@ class Backtester:
         """Check TP/SL hit"""
         high = row['high']
         low = row['low']
+        exit_price = 0
         
         if position['direction'] == 'long':
             if low <= position['sl']:
-                position['exit_price'] = position['sl']
+                exit_price = position['sl'] * (1 - self.slippage) # Slippage on SL
                 position['reason'] = 'SL'
-                position['pnl'] = - (position['size'] * abs(position['entry_price'] - position['sl']))
                 position['status'] = 'closed'
             elif high >= position['tp']:
-                position['exit_price'] = position['tp']
+                exit_price = position['tp'] * (1 - self.slippage) # Slippage on TP? Usually limit, but let's be conservative
                 position['reason'] = 'TP'
-                position['pnl'] = (position['size'] * abs(position['tp'] - position['entry_price']))
                 position['status'] = 'closed'
+                
+            if position['status'] == 'closed':
+                raw_pnl = (exit_price - position['entry_price']) * position['size']
                 
         else: # Short
             if high >= position['sl']:
-                position['exit_price'] = position['sl']
+                exit_price = position['sl'] * (1 + self.slippage)
                 position['reason'] = 'SL'
-                position['pnl'] = - (position['size'] * abs(position['sl'] - position['entry_price']))
                 position['status'] = 'closed'
             elif low <= position['tp']:
-                position['exit_price'] = position['tp']
+                exit_price = position['tp'] * (1 + self.slippage)
                 position['reason'] = 'TP'
-                position['pnl'] = (position['size'] * abs(position['entry_price'] - position['tp']))
                 position['status'] = 'closed'
+                
+            if position['status'] == 'closed':
+                raw_pnl = (position['entry_price'] - exit_price) * position['size']
+
+        if position['status'] == 'closed':
+            position['exit_price'] = exit_price
+            
+            # Calculate Fees
+            entry_fee = position['entry_price'] * position['size'] * self.commission
+            exit_fee = exit_price * position['size'] * self.commission
+            total_fees = entry_fee + exit_fee
+            
+            position['pnl'] = raw_pnl - total_fees
+            position['fees'] = total_fees
 
     def _generate_report(self):
         """Generate performance report"""
