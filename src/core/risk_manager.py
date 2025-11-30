@@ -262,35 +262,81 @@ class RiskManager:
         except Exception as e:
             logger.error(f"Error during emergency stop: {e}")
             return False
-    def calculate_futures_quantity(self, entry_price: float, sl_price: float, risk_pct: float = 0.01) -> float:
+    def calculate_futures_quantity(self, entry_price: float, sl_price: float, risk_pct: float = 0.015, leverage_max: int = 5) -> Dict[str, Any]:
         """
         Calculate position size for futures/perpetuals based on risk percentage and stop loss.
         
         Formula: Quantity = (Equity * Risk_Pct) / |Entry - SL|
-        Returns quantity in Base Currency (e.g., BTC).
+        Returns detailed risk metrics including leverage check.
         
         Args:
             entry_price: Entry price
             sl_price: Stop loss price
-            risk_pct: Risk percentage (default 1%)
+            risk_pct: Risk percentage (default 1.5%)
+            leverage_max: Maximum allowed leverage
             
         Returns:
-            Quantity in base currency (e.g. BTC)
+            Dict with quantity, leverage, margin, max_loss, error (if any)
         """
         equity = self.get_total_equity()
         
         if entry_price <= 0 or sl_price <= 0:
-            logger.error("Invalid prices for size calculation")
-            return 0.0
+            return {"error": "Invalid prices"}
             
         price_diff = abs(entry_price - sl_price)
         if price_diff == 0:
-             logger.error("Entry price equals SL price, cannot calculate size")
-             return 0.0
+             return {"error": "Entry equals SL"}
              
-        risk_amount = equity * risk_pct
-        quantity = risk_amount / price_diff
+        # 1. Calculate Max Loss (Risk Amount)
+        max_loss_usd = equity * risk_pct
         
-        logger.info(f"Calculated Futures Size: {quantity:.4f} BTC (Equity: ${equity:.2f}, Risk: ${risk_amount:.2f}, Diff: ${price_diff:.2f})")
+        # 2. Calculate Position Size (BTC)
+        # Size = Risk / Distance
+        position_size_btc = max_loss_usd / price_diff
         
-        return quantity
+        # 3. Calculate Position Value (USD)
+        position_value_usd = position_size_btc * entry_price
+        
+        # 4. Calculate Effective Leverage
+        effective_leverage = position_value_usd / equity
+        
+        # 5. Check Leverage Limit
+        if effective_leverage > leverage_max:
+            logger.warning(f"Calculated leverage {effective_leverage:.2f}x exceeds max {leverage_max}x. Reducing size.")
+            # Cap size to max leverage
+            position_value_usd = equity * leverage_max
+            position_size_btc = position_value_usd / entry_price
+            effective_leverage = leverage_max
+            # Recalculate max loss (will be lower than target risk, which is safe)
+            max_loss_usd = position_size_btc * price_diff
+            
+        return {
+            "quantity_btc": position_size_btc,
+            "quantity_usd": position_value_usd,
+            "max_loss_usd": max_loss_usd,
+            "effective_leverage": effective_leverage,
+            "equity": equity
+        }
+
+    def calculate_exit_levels(self, entry_price: float, sl_price: float, rr_ratio: float = 2.5) -> Dict[str, Any]:
+        """
+        Calculate Take Profit price based on Risk:Reward ratio.
+        """
+        risk_distance = abs(entry_price - sl_price)
+        tp_distance = risk_distance * rr_ratio
+        
+        is_long = entry_price > sl_price # SL below entry = Long
+        
+        if is_long:
+            tp_price = entry_price + tp_distance
+            trade_type = "LONG"
+        else:
+            tp_price = entry_price - tp_distance
+            trade_type = "SHORT"
+            
+        return {
+            "trade_type": trade_type,
+            "tp_price": tp_price,
+            "risk_distance": risk_distance,
+            "rr_ratio": rr_ratio
+        }

@@ -204,11 +204,15 @@ class TradingBot:
         # Schedule daily position opening (e.g., 10:00 AM) - Mostly for Iron Condor
         # schedule.every().day.at(Config.DAILY_SCAN_TIME).do(self.run_daily_routine)
 
-        # Schedule position monitoring every N minutes - For Smart Money and Management
-        schedule.every(Config.MONITORING_INTERVAL_MINUTES).minutes.do(self.run_monitoring_routine)
+        # FAST LOOP: Manage positions (Trailing Stop, TP) every 30 seconds
+        schedule.every(30).seconds.do(self.manage_open_positions)
+        
+        # SLOW LOOP: Scan for new setups every N minutes
+        schedule.every(Config.MONITORING_INTERVAL_MINUTES).minutes.do(self.scan_and_open_positions)
 
         logger.info("Bot started. Schedules:")
-        logger.info(f"  - Monitoring & Scan: Every {Config.MONITORING_INTERVAL_MINUTES} minutes")
+        logger.info(f"  - Management Loop: Every 30 seconds")
+        logger.info(f"  - Strategy Scan: Every {Config.MONITORING_INTERVAL_MINUTES} minutes")
 
         # Run initial scan
         logger.info("\nRunning initial scan...")

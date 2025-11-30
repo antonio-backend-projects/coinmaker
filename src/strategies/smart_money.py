@@ -2,10 +2,14 @@ import time
 import logging
 import ccxt
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from src.strategies.base_strategy import BaseStrategy
+from src.core.deribit_client import DeribitClient
+from src.core.state_manager import StateManager
+from config import SmartMoneyConfig
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +99,21 @@ class SmartMoneyStrategy(BaseStrategy):
     3. Order Flow Confirmation (CVD & Absorption)
     """
 
-    def __init__(self, client, config, dependencies):
+    def __init__(self, client: DeribitClient, config: SmartMoneyConfig, dependencies: Dict[str, Any]):
         super().__init__(client, config, dependencies)
         self.flow_analyzer = AdvancedFlowAnalyzer(symbol=config.binance_symbol)
+        
+        # Persistence
+        self.state_manager = StateManager()
+        self.state_file = f"smart_money_{config.binance_symbol.replace('/','_')}_state.json"
+        
+        # Load persisted state
+        saved_state = self.state_manager.load_state(self.state_file)
+        if saved_state:
+            self.active_position = saved_state
+            logger.info(f"Restored active position from state: {self.active_position}")
+        else:
+            self.active_position = None
 
     def is_time_window_active(self) -> bool:
         """Check if we are in the active trading window"""
@@ -145,8 +161,6 @@ class SmartMoneyStrategy(BaseStrategy):
         
         # 2. Liquidity Hunter (Price Action)
         # We use the instrument from config or default to BTC-PERPETUAL for Deribit
-        # Note: self.config.symbol is likely "BTC/USDT" for Binance, but for Deribit we need "BTC-PERPETUAL"
-        # Let's assume we are trading BTC-PERPETUAL on Deribit based on BTCUSDT spot signals.
         instrument = "BTC-PERPETUAL" 
         
         ohlcv = self.client.get_ohlcv(instrument, timeframe=self.config.timeframe, limit=50)
@@ -215,8 +229,7 @@ class SmartMoneyStrategy(BaseStrategy):
             logger.error("No Stop Loss price provided, cannot execute.")
             return False
             
-        # 1. Get current price (approximate, for sizing)
-        # We can use the last close from OHLCV or fetch ticker
+        # 1. Get current price
         ticker = self.client.get_ticker(instrument)
         current_price = ticker.get('last_price') if ticker else None
         
@@ -224,34 +237,140 @@ class SmartMoneyStrategy(BaseStrategy):
             logger.error("Could not get current price for sizing")
             return False
             
-        # 2. Calculate Size
-        # Risk 1% (0.01) - TODO: Make configurable in Config
-        risk_pct = 0.01 
+        # 2. Calculate Size & Exit Levels
+        risk_manager = self.dependencies['risk_manager']
         
-        # Calculate quantity in BTC (Base Currency)
-        qty_btc = self.dependencies['risk_manager'].calculate_futures_quantity(current_price, sl_price, risk_pct)
+        # Sizing
+        sizing = risk_manager.calculate_futures_quantity(
+            current_price, 
+            sl_price, 
+            risk_pct=self.config.risk_per_trade_pct,
+            leverage_max=self.config.leverage_max
+        )
         
-        if qty_btc <= 0:
-            logger.error("Calculated quantity is 0, aborting.")
+        if "error" in sizing:
+            logger.error(f"Sizing error: {sizing['error']}")
             return False
             
-        # 3. Convert to Contracts (USD) for Deribit Inverse
-        # Qty (USD) = Qty (BTC) * Price
-        # Round to nearest 10 USD (Deribit BTC contract size)
-        contract_size_usd = 10.0 # Standard Deribit BTC contract
+        qty_btc = sizing['quantity_btc']
+        logger.info(f"Sizing: {qty_btc:.4f} BTC | Lev: {sizing['effective_leverage']:.2f}x | Risk: ${sizing['max_loss_usd']:.2f}")
+
+        # Exit Levels (TP)
+        exits = risk_manager.calculate_exit_levels(
+            current_price, 
+            sl_price, 
+            rr_ratio=self.config.risk_reward_ratio
+        )
+        tp_price = exits['tp_price']
+        logger.info(f"Targets: Entry {current_price} | SL {sl_price} | TP {tp_price} (R:R {self.config.risk_reward_ratio})")
+
+        # 3. Convert to Contracts (USD)
+        contract_size_usd = 10.0
         qty_usd_raw = qty_btc * current_price
         qty_contracts = int(round(qty_usd_raw / contract_size_usd) * contract_size_usd)
         
         if qty_contracts < contract_size_usd:
-            logger.warning(f"Quantity {qty_usd_raw} USD too small for min contract {contract_size_usd}")
+            logger.warning("Quantity too small for min contract")
             return False
-            
-        logger.info(f"Sizing: {qty_btc:.4f} BTC -> ${qty_contracts} Contracts")
 
         # 4. Execute Trade
-        return self.dependencies['order_manager'].execute_smart_money_trade(
+        success = self.dependencies['order_manager'].execute_smart_money_trade(
             instrument, direction, qty_contracts, sl_price
         )
+        
+        if success:
+            # Store position details for management
+            self.active_position = {
+                "instrument": instrument,
+                "direction": direction,
+                "entry_price": current_price,
+                "sl_price": sl_price,
+                "tp_price": tp_price,
+                "risk_distance": exits['risk_distance'],
+                "quantity": qty_contracts,
+                "entry_time": datetime.now()
+            }
+            # Save state
+            self.state_manager.save_state(self.state_file, self.active_position)
+            logger.info("Position stored and persisted for active management")
+            
+        return success
 
     def manage_positions(self) -> Dict[str, Any]:
-        return {"closed_tp": 0, "closed_sl": 0, "total_pnl": 0}
+        """
+        Active Position Management:
+        1. Check TP hit
+        2. Break-Even Trigger (at 1R profit)
+        3. Trailing Stop (Dynamic)
+        """
+        if not hasattr(self, 'active_position') or not self.active_position:
+            return {}
+            
+        pos = self.active_position
+        instrument = pos['instrument']
+        
+        # Get current price
+        ticker = self.client.get_ticker(instrument)
+        current_price = ticker.get('last_price') if ticker else None
+        
+        if not current_price:
+            return {}
+            
+        is_long = pos['direction'] == 'buy'
+        entry_price = pos['entry_price']
+        current_sl = pos['sl_price']
+        tp_price = pos['tp_price']
+        risk_dist = pos['risk_distance']
+        
+        # 1. Check Take Profit
+        if (is_long and current_price >= tp_price) or (not is_long and current_price <= tp_price):
+            logger.info(f"Take Profit hit at {current_price}! Closing position.")
+            self.client.close_position(instrument, type_="market")
+            self.active_position = None
+            self.state_manager.delete_state(self.state_file)
+            return {"closed_tp": 1}
+            
+        # 2. Trailing Stop Logic
+        new_sl = current_sl
+        
+        if is_long:
+            # Profit distance
+            profit = current_price - entry_price
+            
+            # Break-Even Trigger: If profit > 1R, move SL to Entry
+            if profit >= risk_dist and current_sl < entry_price:
+                logger.info(f"Profit > 1R. Moving SL to Break-Even: {entry_price}")
+                new_sl = entry_price
+                
+            # Trailing: If price moves up, trail SL at 1R distance
+            # Ideal SL = Current Price - 1R
+            ideal_sl = current_price - risk_dist
+            if ideal_sl > new_sl:
+                # Only move SL up
+                new_sl = ideal_sl
+                logger.info(f"Trailing SL updated: {new_sl:.2f}")
+                
+        else: # Short
+            profit = entry_price - current_price
+            
+            # Break-Even
+            if profit >= risk_dist and current_sl > entry_price:
+                logger.info(f"Profit > 1R. Moving SL to Break-Even: {entry_price}")
+                new_sl = entry_price
+                
+            # Trailing
+            ideal_sl = current_price + risk_dist
+            if ideal_sl < new_sl:
+                # Only move SL down
+                new_sl = ideal_sl
+                logger.info(f"Trailing SL updated: {new_sl:.2f}")
+                
+        # 3. Update SL on Exchange if changed
+        if new_sl != current_sl:
+            logger.info(f"Updating SL order on exchange to {new_sl}")
+            # TODO: Implement update_sl_order in OrderManager
+            # For now, we update local state
+            self.active_position['sl_price'] = new_sl
+            self.state_manager.save_state(self.state_file, self.active_position)
+            
+        return {"status": "managing", "current_pnl": current_price - entry_price}

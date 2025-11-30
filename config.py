@@ -53,6 +53,9 @@ class SmartMoneyConfig(StrategyConfig):
     absorption_min_vol: float = 10.0
     absorption_delta_ratio: float = 0.15
     absorption_price_threshold: float = 0.01
+    risk_per_trade_pct: float = 0.015
+    risk_reward_ratio: float = 2.5
+    leverage_max: int = 5
 
 
 class Config:
@@ -106,7 +109,10 @@ class Config:
                 binance_symbol=os.getenv("SM_BINANCE_SYMBOL", "BTCUSDT"),
                 absorption_min_vol=float(os.getenv("SM_ABSORPTION_MIN_VOL", 10.0)),
                 absorption_delta_ratio=float(os.getenv("SM_ABSORPTION_DELTA_RATIO", 0.15)),
-                absorption_price_threshold=float(os.getenv("SM_ABSORPTION_PRICE_THRESHOLD", 0.01))
+                absorption_price_threshold=float(os.getenv("SM_ABSORPTION_PRICE_THRESHOLD", 0.01)),
+                risk_per_trade_pct=float(os.getenv("RISK_PER_TRADE_PCT", 0.015)),
+                risk_reward_ratio=float(os.getenv("RISK_REWARD_RATIO", 2.5)),
+                leverage_max=int(os.getenv("LEVERAGE_MAX", 5))
             ))
 
     @classmethod
